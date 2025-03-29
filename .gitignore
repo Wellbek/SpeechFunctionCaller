@@ -1,0 +1,9 @@
+target/
+.project
+.settings/
+.gradle/
+build/
+.vscode/
+/gradle/
+gradlew
+gradlew.bat

@@ -1,0 +1,27 @@
+plugins {
+    id 'java'
+    id 'java-library'
+    id 'application'
+
+    // Spring Plugins
+    id 'io.spring.dependency-management' version '1.0.15.RELEASE'
+    id 'org.springframework.boot' version "${spring_version}"
+}
+
+group = 'speechfunctioncaller'
+version = '0.0.0'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    developmentOnly group: 'org.springframework.boot', name: 'spring-boot-devtools', version: spring_version  // Required for Hot-Reload
+    implementation group: 'org.springframework.shell', name: 'spring-shell-starter', version: spring_shell_version
+    implementation group: 'org.springframework.boot', name: 'spring-boot-starter-web', version: spring_version
+    implementation group: 'org.springframework.boot', name: 'spring-boot-starter-websocket', version: spring_version
+    implementation group: 'org.slf4j', name: 'slf4j-simple', version: slf4j_version
+
+    implementation 'com.google.code.gson:gson:2.10.1' // For JSON handling
+    implementation 'com.azure:azure-ai-openai:1.0.0-beta.12' // Azure OpenAI library
+}
