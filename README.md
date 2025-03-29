@@ -15,12 +15,11 @@ A tool for integrating voice control into web applications using LLMs
 
 1. **Add your frontend as a dependency**:
 
-    In your existing project's frontend code, import and utilize the component:
     ```bash
     cd existing-project/frontend
     npm install --save ../speechfunctioncaller/frontend
     ```
-    Adjust the path to point to the correct frontend script.
+
 2. **Import and use in TypeScript code**: In your existing project's frontend code, import and utilize the component:
    ```typescript
     // In your existing project's frontend code
