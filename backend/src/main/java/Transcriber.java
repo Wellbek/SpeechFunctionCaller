@@ -1,6 +1,5 @@
 package speechfunctioncaller;
 
-import umlp.backendrte.command.SimpleResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.*;
 import java.util.concurrent.*;

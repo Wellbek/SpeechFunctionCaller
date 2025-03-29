@@ -25,3 +25,7 @@ dependencies {
     implementation 'com.google.code.gson:gson:2.10.1' // For JSON handling
     implementation 'com.azure:azure-ai-openai:1.0.0-beta.12' // Azure OpenAI library
 }
+
+tasks.withType(org.springframework.boot.gradle.tasks.bundling.BootJar).all {
+    enabled = false
+}

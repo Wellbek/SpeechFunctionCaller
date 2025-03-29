@@ -7,7 +7,6 @@ import com.azure.core.credential.AzureKeyCredential;
 import com.azure.core.util.BinaryData;
 import com.google.gson.*;
 import java.util.*;
-import umlp.backendrte.command.SimpleResult;
 import java.util.regex.*;
 
 /**
