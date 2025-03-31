@@ -8,7 +8,7 @@ This tool is part of my bachelor thesis at the Software Engineering Group at RWT
 - Speech recognition effective in industrial environments
 - Real-time command processing with minimal latency
 - High accuracy even in noisy environments (93.34% accuracy in function resolution under high background noise)
-- No misfires even in with ambiguous fully natural voice commands
+- No misfires even with ambiguous fully natural voice commands
 - Built on Azure OpenAI services, Whisper, and GPT-4o with function calling capabilities
 
 ### Impact
@@ -226,7 +226,7 @@ To integrate the tool into an existing project, follow these steps:
    ```
 
 8. **Invoke Speech Functions**
-    You can now initiate the capture process or submit queries for function resolution directly. Alternatively, you can achieve this by using the 'Start Capture' button in the tool's UI within the web browser. If one of the specified keywords is detected, queries will be automatically submitted for function resolution.
+    - You can now initiate the capture process or submit queries for function resolution directly. Alternatively, you can achieve this by using the 'Start Capture' button in the tool's UI within the web browser. If one of the specified keywords is detected, queries will be automatically submitted for function resolution.
 
    ```typescript
    // To start speech capture
