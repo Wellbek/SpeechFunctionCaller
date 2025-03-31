@@ -37,8 +37,7 @@ public class FunctionResolver {
     private final List<ChatRequestUserMessage> contextHistory = new ArrayList<>(); // Conversation history
     private String contextSummary = ""; // Compressed summary of past conversations
     private String query = ""; // Current user query
-    private List<ChatCompletionsToolDefinition> tools = new ArrayList<>(); // Registered tools
-
+    
     // List of available function definitions that can be called
     private List<ChatCompletionsToolDefinition> tools = new ArrayList<>();
 
