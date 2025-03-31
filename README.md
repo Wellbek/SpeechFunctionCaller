@@ -224,10 +224,13 @@ To integrate the tool into an existing project, follow these steps:
      RESOLVER_MODEL
    );
    ```
+   
+8. **(OPTIONAL) Customize Function Resolution Keywords**
+    - Call `SpeechFunctionCaller.getInstance().setCommandKeywords(["your", "custom", "keywords"])` to define when functions should be resolved.
+    - By default, the list contains the keyword "submit".
 
-8. **Invoke Speech Functions**
+9. **Invoke Speech Functions**
     - You can now initiate the capture process or submit queries for function resolution directly. Alternatively, you can achieve this by using the 'Start Capture' button in the tool's UI within the web browser. If one of the specified keywords is detected, queries will be automatically submitted for function resolution.
-
    ```typescript
    // To start speech capture
    SpeechFunctionCaller.getInstance().toggleCapture();
