@@ -16,7 +16,10 @@
  * 6. Call SpeechFunctionCaller.getInstance().setCommunicationHandler with your created Handler,
  * 6.1 (OPTIONAL): If WebSockets and SpringBoot are supported, you can specify the URL of the WebSocketCommunicationHandler to enable audio streaming
  * 7. Initialize AZURE Client with setCredentials(this.ENDPOINT, this.TOKEN, this.TRANSCRIBER_MODEL, this.RESOLVER_MODEL)
- * 8. Call SpeechFunctionCaller.getInstance().toggleCapture() and/or ...submitQuery() whereever you need them
+ * 8. (OPTIONAL): To customize the keywords that trigger function resolution, use the following:
+ *    - Call `SpeechFunctionCaller.getInstance().setCommandKeywords(["your", "custom", "keywords"])` to define when functions should be resolved.
+ *    - By default, the list contains the keyword "submit".
+ * 9. Call SpeechFunctionCaller.getInstance().toggleCapture() and/or ...submitQuery() whereever you need them
  * 
  * @author Louis Wellmeyer
  * @date March 31, 2025
@@ -830,7 +833,21 @@
             }
         }
 
-         /**
+        /**
+         * Sets the command keywords used for function resolution based on natural language transcription. By default the keyword is "submit".
+         * 
+         * This method allows the user to update the list of command keywords that will be identified 
+         * in the transcriptions. When a transcription contains any of these keywords, functions are resolved
+         * on the given user natural language.
+         *
+         * @param {string[]} keywords - An array of strings representing the new command keywords.
+         * @returns {void}
+         */
+        public setCommandKeywords(keywords: string[]) {
+            this.commandKeywords = keywords;
+        }
+
+        /**
          * Submits query for function resolution
          * 
          * @returns {Promise<string>} Resolution result as string
