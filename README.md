@@ -8,7 +8,7 @@ This tool is part of my bachelor thesis at the Software Engineering Group at RWT
 - Speech recognition effective in industrial environments
 - Real-time command processing with minimal latency
 - High accuracy even in noisy environments (93.34% accuracy in function resolution under high background noise)
-- No misfires even in with ambiguous fully natural voice commands
+- No misfires even with ambiguous fully natural voice commands
 - Built on Azure OpenAI services, Whisper, and GPT-4o with function calling capabilities
 
 ### Impact
