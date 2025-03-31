@@ -1,32 +1,37 @@
 /**
- * Use this script to configure, manage, and envoke backend function calling and speech transcription
+ * @fileoverview Use this script to configure, manage, and envoke backend function calling and speech transcription
  *
  * How to use:
  * 1. Define communication with backend by implementing the CommunicationHandler
  * 2. Register visible HTMLElements by implementing ElementHandlers
  * 3. Add Elements from 2. to the ElementRegistry
- * 4. SpeechFunctionCaller.getInstance().initDOMs([REGISTERED ELEMENTHANDLERS]); to select what tools to be used by the LLM
- * 5. Add Decorator to callable functions and define their Schema
- * 6. Register a callback to handle the JSON function call result
+ * 4. Add Decorator to callable functions and define their Schema
+ * 5. Register a callback to handle the JSON function call result
  *  e.g.:
     SpeechFunctionCaller.getInstance().onFCComplete((functioncallresult) => {
       console.log("Function Call Result: ", functioncallresult)
       this.handleFunctionCall(functioncallresult)
     });
  * ======== Atfer all HTML Elements are initialized ====================
+ * 6. Call SpeechFunctionCaller.getInstance().setCommunicationHandler with your created Handler,
+ * 6.1 (OPTIONAL): If WebSockets and SpringBoot are supported, you can specify the URL of the WebSocketCommunicationHandler to enable audio streaming
  * 7. Initialize AZURE Client with setCredentials(this.ENDPOINT, this.TOKEN, this.TRANSCRIBER_MODEL, this.RESOLVER_MODEL)
- * 8. call SpeechFunctionCaller.getInstance().setCommunicationHandler with your created Handler
- * 9. call SpeechFunctionCaller.getInstance().toggleCapture() and/or ...submitQuery() whereever you need them
+ * 8. Call SpeechFunctionCaller.getInstance().toggleCapture() and/or ...submitQuery() whereever you need them
+ * 
+ * @author Louis Wellmeyer
+ * @date March 31, 2025
+ * @license CC BY
  */
 
 /**
  * Decorator that automatically registers tool schema functions
- * @param schemaGenerator Function that generates a tool's JSON schema based on this format https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/function-calling.
+ * @param {function} schemaGenerator Function that generates a tool's JSON schema based on this format https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/function-calling.
  *      Since the parameter is a function and we evaluate the JSON only later, you can add functions inside the JSONs to be executed on read (see example "enum")
- * @returns Decorator function that processes and stores the schema
+ * @returns {function} Decorator function that processes and stores the schema
  *
  * Example:
-    *@FunctionCall(
+    *```
+    @FunctionCall(
         function () {
             return {
             name: "setTextField",
@@ -48,7 +53,7 @@
             }
             };
         })
-    public setTextField(textField: string, value: string): void {...}
+    public setTextField(textField: string, value: string): void {...}``` 
     *
     */
     export function FunctionCall(schemaGenerator: () => any) {
@@ -81,12 +86,15 @@
      * As of right now, data is always supposed to be sent and handled as a JSON string.
      *
      * Example call:
-     *  this.sendDataToHandler(JSON.stringify({
+     * 
+     *  ```this.sendDataToHandler(JSON.stringify({
             "class": "FunctionResolver"
             "function": "setCredentials",
             "parameters": [endpoint, token, resolver_model]
         }));
+        ```
      *
+     * @returns {void}
      */
     export interface CommunicationHandler {
         sendData(data: string): Promise<any>;
@@ -100,7 +108,7 @@
      *  3. A Label that can be used by the LLM to decide if/what HTMLElement to select
      *
      * Example:
-     *  class GemTextInputHandler implements ElementHandler {
+     *  ```class GemTextInputHandler implements ElementHandler {
             getLabel(root: HTMLElement): string {
                 const label = root.querySelector("label");
                 return label ? label.textContent?.trim() : "";
@@ -110,6 +118,7 @@
                 return root.querySelector("input") || null;
             }
         }
+        ```
      */
     export interface ElementHandler {
         // Method to get the label of an element
@@ -141,6 +150,12 @@
         }
     }
 
+    /**
+     * WebSocketCommunicationHandler is an optional handler that enables real-time audio streaming 
+     * via WebSocket for efficient low-latency communication. Instead of relying on polling mechanisms, 
+     * this class allows direct transmission of binary audio data while receiving immediate feedback 
+     * from the server.
+     */
     export class WebSocketCommunicationHandler {
         private socket: WebSocket;
         private isConnected: boolean = false;
@@ -150,6 +165,14 @@
         private reconnectDelay: number = 1000;
         private onTranscriptionCallback: (transcription: string) => void;
 
+        /**
+         * Initializes a new WebSocketCommunicationHandler instance.
+         * 
+         * @param {string} wsUrl - WebSocket server URL.
+         * @param {string} clientId - Unique client identifier for instance matching in the backend.
+         * @param {function} onTranscription - Callback function to handle received transcription data.
+         * @returns {void}
+         */
         constructor(private wsUrl: string, private clientId: string, onTranscription: (transcription: string) => void) {
             this.onTranscriptionCallback = onTranscription;
 
@@ -160,14 +183,21 @@
             }
         }
 
+        /**
+         * Creates a new WebSocket connection.
+         * 
+         * @returns {WebSocket} The initialized WebSocket instance.
+         */
         private createWebSocket(): WebSocket {
-            const socketUrl = `${this.wsUrl}?clientId=${this.clientId}`; // ClientId as query parameter to retreive client instance on backend
+            const socketUrl = `${this.wsUrl}?clientId=${this.clientId}`; // Append clientId as a query parameter to retrieve the appropriate client instances on the backend
         
             const socket = new WebSocket(socketUrl);
 
             socket.onopen = () => {
                 console.log("WebSocket connection established");
                 this.isConnected = true;
+
+                // Send any queued messages upon successful connection
                 while (this.messageQueue.length > 0) {
                     const message = this.messageQueue.shift();
                     if (message) this.socket.send(message);
@@ -200,7 +230,13 @@
             return socket;
         }
 
-        private attemptReconnect(): void {
+        /**
+         * Attempts to reconnect the WebSocket connection with an increasing delay.
+         * Stops retrying after reaching the maximum number of attempts.
+         * 
+         * @returns {void}
+         */
+        private attemptReconnect() {
             if (this.reconnectAttempts < this.maxReconnectAttempts) {
                 this.reconnectAttempts++;
                 console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
@@ -212,8 +248,13 @@
             }
         }
 
-        // Method to send binary data directly
-        sendBinaryData(data: ArrayBuffer): void {
+        /**
+         * Sends binary audio data via WebSocket if connected.
+         * 
+         * @param data - The binary audio data to send.
+         * @returns {void}
+         */
+        sendBinaryData(data: ArrayBuffer) {
             if (!this.isConnected) {
                 console.warn("WebSocket not connected, cannot send binary data");
                 return;
@@ -227,6 +268,12 @@
         }
     }
 
+    /**
+     * AudioController is a UI component that provides an interface for controlling and monitoring 
+     * audio input. It allows users to adjust the audio input sensitivity using a threshold slider, 
+     * visualize audio energy levels through a meter, and toggle the start/stop of the audio recording process.
+     * The component also allows for resetting the audio capture process.
+     */
     class AudioController {
         private container: HTMLElement;
         private sliderElem: HTMLInputElement;
@@ -238,6 +285,11 @@
         private resetButton: HTMLButtonElement;
         private isCapturing: boolean = false;
     
+        /**
+         * Initializes the AudioController by creating the necessary HTML elements for the UI.
+         * Sets up event listeners for interactions such as adjusting the threshold and toggling 
+         * the capture button.
+         */
         constructor() {
             this.container = document.createElement("div");
             this.container.className = "audio-control";
@@ -314,7 +366,14 @@
             document.body.appendChild(this.container);
         }
     
-        public updateMeter(audioEnergy: number): void {
+        /**
+         * Updates the audio energy meter based on the given audio energy level.
+         * Adjusts the meter's visual width and color dynamically according to the energy value.
+         * If the energy level exceeds the threshold, the meter turns green; otherwise, it turns red.
+         * @param {number} audioEnergy - The current energy level of the audio input.
+         * @returns {void}
+         */
+        public updateMeter(audioEnergy: number) {
             this.currentEnergy = audioEnergy;
             this.meterElem.value = this.currentEnergy.toString();
     
@@ -325,15 +384,33 @@
             this.meterWrapper.style.backgroundColor = this.currentEnergy >= this.threshold ? "rgb(33, 168, 37)" : "rgb(182, 37, 27)";
         }
     
-        private updateThreshold(): void {
+        /**
+         * Updates the threshold value based on the slider input. 
+         * This value determines the sensitivity of the audio capture.
+         * 
+         * @returns {void}
+         */
+        private updateThreshold() {
             this.threshold = parseInt(this.sliderElem.value);
         }
     
+        /**
+         * Returns the current sensitivity threshold value for the audio input.
+         * 
+         * @returns {number} The current threshold value.
+         */
         public getThreshold(): number {
             return this.threshold;
         }
     
-        public toggleCapture(): void {
+        /**
+         * Toggles the start/stop state of audio capture.
+         * Changes the button text and color accordingly.
+         * When activated, it calls the SpeechFunctionCaller to start or stop recording.
+         * 
+         * @returns {void}
+         */
+        public toggleCapture() {
             this.isCapturing = !this.isCapturing;
     
             if (this.isCapturing) {
@@ -347,7 +424,12 @@
             SpeechFunctionCaller.getInstance().toggleCapture();
         }
 
-        private reset(): void {
+        /**
+         * Resets the audio capture process, clearing any captured data and resetting the audio energy meter.
+         * 
+         * @returns {void}
+         */
+        private reset() {
             SpeechFunctionCaller.getInstance().reset();
 
             this.currentEnergy = 0;
@@ -355,6 +437,15 @@
         }
     }
 
+    /**
+     * Manages the status messages and message history displayed to the user.
+     * This class provides functionality to show various types of messages (processing, success, info, error)
+     * and keeps a history of the last few messages.
+     * 
+     * It helps provide transparency to the user, especially for backend and LLM (Large Language Model) executions.
+     * Transparency is crucial to build trust with users and help them understand what the application is doing, 
+     * especially when dealing with complex processes like AI/ML model executions.
+     */
     class StatusManager {
         private statusElement: HTMLElement | null = null;
         private messageHistoryElement: HTMLElement | null = null;
@@ -362,11 +453,19 @@
         private messageHistory: string[] = [];
         private maxHistoryLength: number = 5;
     
+        /**
+         * Constructor initializes the status manager by creating the status display elements.
+         */
         constructor() {
             this.createStatusElements();
         }
     
-        private createStatusElements(): void {
+        /**
+         * Creates and sets up the HTML elements for the status display and message history.
+         * 
+         * @returns {void}
+         */
+        private createStatusElements() {
             if (!this.statusElement) {
                 const container = document.createElement("div");
                 container.style.position = "fixed";
@@ -403,7 +502,12 @@
             }
         }
     
-        public showProcessing(): void {
+        /**
+         * Displays a "Processing audio..." message to the user, indicating that an operation is still in progress.
+         * 
+         * @returns {void}
+         */
+        public showProcessing() {
             if (!this.statusElement) this.createStatusElements();
             if (this.statusElement && this.containerElement) {
                 this.statusElement.textContent = "Processing audio...";
@@ -413,7 +517,13 @@
             }
         }
     
-        public showSuccess(message: string): void {
+        /**
+         * Displays a success message to the user. It is used to indicate a successful operation like finished transcription or received function call JSON.
+         * 
+         * @param {string} message - The success message to display.
+         * @returns {void}
+         */
+        public showSuccess(message: string) {
             if (!this.statusElement) this.createStatusElements();
             if (this.statusElement && this.containerElement) {
                 this.statusElement.textContent = message;
@@ -423,7 +533,14 @@
             }
         }
     
-        public showInfo(message: string): void {
+        /**
+         * Displays an informational message to the user. This is typically used for general information 
+         * or updates during operations, like indicating crucial progress steps or feedback.
+         * 
+         * @param {string} message - The message to display.
+         * @returns {void}
+         */
+        public showInfo(message: string) {
             if (!this.statusElement) this.createStatusElements();
             if (this.statusElement && this.containerElement) {
                 this.statusElement.textContent = message;
@@ -435,7 +552,14 @@
             }
         }
     
-        public showError(message: string): void {
+        /**
+         * Displays an error message to the user. This is used to report failures or problems in processing.
+         * It helps users identify issues in configuration, with the backend, or other parts of the system.
+         * 
+         * @param {string} message - The error message to display.
+         * @returns {void}
+         */
+        public showError(message: string) {
             if (!this.statusElement) this.createStatusElements();
             if (this.statusElement && this.containerElement) {
                 this.statusElement.textContent = message;
@@ -447,11 +571,23 @@
             }
         }
     
-        public logMessage(message: string): void {
+        /**
+         * Logs a message to the message history without affecting the current status display.
+         * 
+         * @param {string} message - The message to log.
+         * @returns {void}
+         */
+        public logMessage(message: string) {
             this.addToHistory(message);
         }
     
-        private addToHistory(message: string): void {
+        /**
+         * Adds a message to the history and updates the history display.
+         * 
+         * @param {string} message - The message to add to the history.
+         * @returns {void}
+         */
+        private addToHistory(message: string) {
             if (!this.messageHistoryElement) return;
     
             const timestamp = new Date().toLocaleTimeString();
@@ -465,7 +601,12 @@
             this.updateHistoryDisplay();
         }
     
-        private updateHistoryDisplay(): void {
+        /**
+         * Updates the message history display to show the most recent messages.
+         * 
+         * @returns {void}
+         */
+        private updateHistoryDisplay() {
             if (!this.messageHistoryElement) return;
     
             this.messageHistoryElement.innerHTML = '';
@@ -478,14 +619,12 @@
             });
         }
     
-        public hide(): void {
+        public hide() {
             if (this.containerElement) {
                 this.containerElement.style.display = "none";
             }
         }
     }
-
-    const CHUNK_SIZE = 5000; // Max number of chars each packet sent via base64 can contain
 
     /**
      * Interface for audio chunk data structure
@@ -502,42 +641,44 @@
     }
 
     /**
-     * Main class as a frontend entry-point for backend speech transcribtion, function calling, ...
-     * Singleton pattern: as there ever only needs to be one instance and we have global states
+     * Main class as a frontend entry-point for backend speech transcription, function calling, ...
+     * 
+     * Singleton pattern: as there ever only needs to be one instance per client and we have global states
      */
     export class SpeechFunctionCaller {
         private MAX_CHUNK_SIZE = 512 * 1024; // 512 KB
+        private CHUNK_SIZE = 5000; // Max number of chars each packet sent via Base64 can contain
 
         private static instance: SpeechFunctionCaller;
         private elementMap = new Map<string, Map<string, HTMLElement>>();  // {TYPE : {LABEL : HTMLElement}}
         private toolSchemas: (() => any)[] = []; // Stores schema generator functions, not their results. To get results just call the generator and stringify to JSON
 
-        private capturing = false
+        private capturing = false // Flag to indicate if audio is currently being captured
 
         private mediaRecorder: MediaRecorder | null = null;
-        private audioChunks: Blob[] = [];
-        private audioContext: AudioContext;
+        private audioChunks: Blob[] = []; // Audio chunks captured during recording
+        private audioContext: AudioContext; 
 
-        private communicationHandler: CommunicationHandler | null = null;
-        private audioWebHandler: WebSocketCommunicationHandler | null = null;
+        private communicationHandler: CommunicationHandler | null = null; // Communication handler used to communicate with the backend and evoke backend logic
+        private audioWebHandler: WebSocketCommunicationHandler | null = null; // (Optional) WebSocket handler for audio-specific communication with the backend for higher efficiency
 
-        private chunkInterval: number = 1000;
+        private chunkInterval: number = 1000; // Interval time in milliseconds for chunk processing
         private chunkIntervalId: number | null = null;
-        private lastTranscription: string = '';
-        private backoffDelay: number = 1000;
-        private maxDelay: number = 10000;
-        private minDelay: number = 1000;
+        private lastTranscription: string = ''; // The most recent transcription result to display information and compare to new incoming transcriptions
+        private backoffDelay: number = 1000; // Polling backoff interval
+        private maxDelay: number = 10000; // Maximum polling interval in milliseconds
+        private minDelay: number = 1000; // Minimum polling interval in milliseconds
         private isPolling: boolean = false;
-        private commandKeywords: string[] = ["submit"];
+        private commandKeywords: string[] = ["submit"]; // List of command keywords to look for in transcriptions (e.g., "submit")
 
+        // Callback function for handling the function calling results
         private fcCallback: ((transcription: string) => void) | null = null;
-
-        private statusManager = new StatusManager();
 
         private isProcessing: boolean = false;
         private processingQueue: Blob[] = []; // queue to store chunks waiting to be processed
 
         private audioController = new AudioController();
+        private statusManager = new StatusManager();
 
         // Singleton pattern: always only one instance
         public static getInstance(): SpeechFunctionCaller {
@@ -549,17 +690,21 @@
 
         /**
          * Sets the communication handler for backend interaction
-         * @param handler Implementation of CommunicationHandler interface
+         * 
+         * @param {CommunicationHandler} handler Implementation of CommunicationHandler interface
+         * @returns {void}
          */
-        public setCommunicationHandler(handler: CommunicationHandler): void {
+        public setCommunicationHandler(handler: CommunicationHandler) {
             this.communicationHandler = handler;
         }
 
         /**
          * Sets the audio handler for streaming audio data
-         * @param url local url where the audio is sent to
+         * 
+         * @param {string} url local url where the audio is sent to
+         * @returns {void}
          */
-        public setAudioWebHandler(url: string, clientId: string): void {
+        public setAudioWebHandler(url: string, clientId: string) {
             this.audioWebHandler = new WebSocketCommunicationHandler(url, clientId, (transcription) => {
                 if (transcription !== this.lastTranscription) {
                     this.lastTranscription = transcription;
@@ -575,10 +720,12 @@
 
         /**
          * Configures credentials for backend AZURE service where transcriber model and resolver resides
-         * @param endpoint AZURE service URL
-         * @param token AZURE Authentication token
-         * @param transcriber_model Model for speech transcription
-         * @param resolver_model Model for function resolution
+         * 
+         * @param {string} endpoint AZURE service URL
+         * @param {string} token AZURE Authentication token
+         * @param {string} transcriber_model Model for speech transcription
+         * @param {string} resolver_model Model for function resolution
+         * @returns {void}
          */
         public async setCredentials(endpoint: string, token: string, transcriberModel: string, resolverModel: string) {
             await this.sendDataToHandler(JSON.stringify({
@@ -598,8 +745,9 @@
 
         /**
          * Sends data to the backend via communication handler with the custom configuration to interact with backend
-         * @param data String data to send
-         * @returns Response from backend
+         * 
+         * @param {string} data String data to send
+         * @returns {any} Response from backend
          */
         public sendDataToHandler(data: string): any {
             if (this.communicationHandler) {
@@ -613,8 +761,10 @@
 
         /**
          * Initializes DOM elements for tool interaction
+         * 
+         * @returns {void}
          */
-        public initDOMs(): void {
+        public initDOMs() {
             // Get all registered element types
             const elementTypes = ElementRegistry.getAllTypes();
 
@@ -650,8 +800,10 @@
 
         /**
          * Prepares for function calling by equipping the FunctionResolver with the callable tools created from the toolSchemas
+         * 
+         * @returns {Promise<void>}
          */
-        public async setUpResolver(): Promise<void> {
+        public async setUpResolver() {
             // reset tools
             await this.sendDataToHandler(JSON.stringify({
                 "class": "FunctionResolver",
@@ -680,7 +832,8 @@
 
          /**
          * Submits query for function resolution
-         * @returns Resolution result as string
+         * 
+         * @returns {Promise<string>} Resolution result as string
          */
         public async submitQuery(): Promise<string> {
             this.statusManager.showInfo("Submitting query for function resolution");
@@ -691,6 +844,14 @@
             }));
         }
 
+        /**
+         * Starts continuous audio recording and processing.
+         * This function starts recording audio, displays status messages to the user, and continuously processes audio chunks.
+         * It sets up an interval to slice the audio data into manageable chunks, checks for silence, and processes only non-silent chunks.
+         * If the audio is not being transmitted via WebSocket, it triggers polling with a backoff mechanism to get transcription updates.
+         * 
+         * @returns {Promise<void>}
+         */
         public async startContinuousRecording() {
             try {
                 await this.startRecording();
@@ -744,6 +905,14 @@
             }
         }
 
+        /**
+         * Polls transcription updates with a backoff strategy.
+         * This function continuously sends a request to the transcription handler to check if there are any new transcriptions.
+         * If a new transcription is found, it handles the update. If no change is found, the backoff delay is increased to reduce 
+         * the frequency of polling. In case of an error, the maximum backoff delay is used, and the process continues at the next interval.
+         * 
+         * @returns {Promise<void>}
+         */
         private async pollWithBackoff() {
             if (!this.isPolling) return; // Stop if polling is disabled
 
@@ -779,7 +948,15 @@
             }
         }
 
-
+        /**
+         * Handles the update of transcription by logging the new transcription for user feedback and triggering actions based on the transcription content.
+         * If there are no items in the processing queue, the status is updated to indicate that transcription is complete. 
+         * If any keywords are detected in the transcription, it triggers the handling of commands by submitting for function resolution.
+         * If the processing queue still has items, it shows that processing is still ongoing.
+         *
+         * @param {TranscriptionStatus} status - The current status of the transcription, which contains the transcription text and if transcription in the backend has finished.
+         * @returns {void}
+         */
         private handleTranscriptionUpdate(status: TranscriptionStatus) {
             if (status.transcription && status.transcription.trim() !== '') {
                 this.statusManager.logMessage(`Transcription: "${status.transcription}"`);
@@ -796,6 +973,13 @@
             }
         }
 
+        /**
+         * Processes the audio chunks in the processing queue. If not already processing, it marks the processing state, 
+         * displays the "processing" status, and processes all chunks in parallel. After processing, the queue is cleared, and 
+         * any errors during the process are handled. Once done, the processing flag is reset to allow for the next process.
+         *
+         * @returns {void}
+         */
         private async processQueue() {
             if (this.isProcessing || this.processingQueue.length === 0) return;
 
@@ -820,6 +1004,15 @@
             }
         }
 
+        /**
+         * Converts an AudioBuffer to a WAV format with 16-bit PCM encoding. This function takes a slice of the audio buffer 
+         * based on the provided start time and converts the sliced buffer to a WAV Blob.
+         * 
+         * @param {AudioBuffer} audioBuffer - The original audio buffer to be converted.
+         * @param {number} startTime - The start time (in seconds) of the audio slice to convert.
+         * 
+         * @returns {Promise<Blob | null>} A promise that resolves to a WAV Blob if conversion is successful, or null if no audio data to process or if an error occurs.
+         */
         private async convertToWAV(audioBuffer: AudioBuffer, startTime: number): Promise<Blob | null> {
             const conversionStart = performance.now();
             // console.log("Starting WAV conversion");
@@ -853,11 +1046,11 @@
                 const channelData = audioBuffer.getChannelData(0).slice(startSample);
                 slicedBuffer.getChannelData(0).set(channelData);
 
+                // Create a source node for the sliced buffer and start rendering it
                 const source = offlineContext.createBufferSource();
                 source.buffer = slicedBuffer;
                 source.connect(offlineContext.destination);
                 source.start();
-
                 const renderedBuffer = await offlineContext.startRendering();
 
                 // convert to 16-bit PCM
@@ -865,6 +1058,7 @@
                 const int16Array = new Int16Array(float32Array.length);
 
                 for (let i = 0; i < float32Array.length; i++) {
+                    // Clip the float32 values to the range of -1 to 1 and convert them to 16-bit PCM
                     const s = Math.max(-1, Math.min(1, float32Array[i]));
                     int16Array[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
                 }
@@ -882,6 +1076,13 @@
             }
         }
 
+        /**
+         * Handles the processing of an audio chunk, including converting it to base64, chunking it if necessary,
+         * and sending it to a backend for further processing and transcription.
+         * 
+         * @param {Blob} audioBlob - The audio chunk (Blob) that needs to be processed.
+         * @returns {void}
+         */
         private async handleAudioChunk(audioBlob: Blob) {
             const processingStart = performance.now();
             console.log(`Starting audio chunk processing at ${new Date().toISOString()}`);
@@ -916,10 +1117,10 @@
 
                     // Split into chunks, ensuring each chunk is valid Base64
                     const chunkingStart = performance.now();
-                    for (let i = 0; i < paddedBase64String.length; i += CHUNK_SIZE) {
-                        const chunkData = paddedBase64String.slice(i, i + CHUNK_SIZE);
-                        const sequence = `${Date.now()}-${Math.floor(i / CHUNK_SIZE)}`;
-                        const end = i + CHUNK_SIZE >= paddedBase64String.length;
+                    for (let i = 0; i < paddedBase64String.length; i += this.CHUNK_SIZE) {
+                        const chunkData = paddedBase64String.slice(i, i + this.CHUNK_SIZE);
+                        const sequence = `${Date.now()}-${Math.floor(i / this.CHUNK_SIZE)}`;
+                        const end = i + this.CHUNK_SIZE >= paddedBase64String.length;
 
                         // Log each chunk's metadata
                         // console.log(`Chunk ${sequence}:`);
@@ -977,8 +1178,8 @@
          * 3. Concatenates all chunks into a single binary string
          * 4. Finally converts the complete binary string to base64 using btoa()
          *
-         * @param bytes - The Uint8Array containing the binary data to convert
-         * @returns A base64 encoded string representation of the input data
+         * @param {Uint8Array} bytes - The Uint8Array containing the binary data to convert
+         * @returns {string} A base64 encoded string representation of the input data
          *
          * Example stack overflow scenario prevented:
          * - A 1MB audio chunk = 1,048,576 bytes
@@ -995,6 +1196,26 @@
             return btoa(binary);
         }
 
+        /**
+         * Determines if the given audio data (in bytes) represents silence by analyzing its energy level.
+         * 
+         * This method calculates the average energy of the audio data by converting the byte array 
+         * (representing 16-bit PCM audio) into audio samples and then computing the average absolute 
+         * value of the samples. If the energy is below a defined threshold, the function considers 
+         * the audio as silence.
+         * 
+         * **How Silence Detection is Achieved:**
+         * 1. The byte array (`Uint8Array`) represents audio data, where each 16-bit sample is stored
+         *    as two consecutive bytes in little-endian format.
+         * 2. The function extracts each 16-bit audio sample by combining two bytes.
+         * 3. The absolute value of each sample is computed and summed up.
+         * 4. The energy of the audio is calculated as the average absolute value of all samples.
+         * 5. If the energy value is below a set threshold, the function classifies the audio as silence.
+         * 
+         * @param {Uint8Array} bytes - The audio data represented as a byte array in 16-bit PCM format.
+         * @returns {boolean} - Returns `true` if the audio is considered silence (energy below threshold), 
+         *                      `false` otherwise.
+         */
         private isSilence(bytes: Uint8Array): boolean {
             const numBytesRead = bytes.length;
 
@@ -1008,12 +1229,24 @@
                 sum += Math.abs(sample);
             }
 
-            const energy = sum / (numBytesRead / 2);
+            const energy = sum / (numBytesRead / 2); // numBytesRead / 2 because each sample is 2 bytes (16 bits)
             // console.log("Audio energy:", energy);
             this.audioController.updateMeter(energy);
             return energy < this.audioController.getThreshold();
         }
 
+        /**
+         * Detects if any predefined command keywords are present in the transcription.
+         * 
+         * This function processes the transcription string by:
+         * 1. Converting the transcription to lowercase.
+         * 2. Removing any non-alphabetical characters (except spaces).
+         * 3. Splitting the cleaned transcription into individual words.
+         * 4. Checking if any of the predefined command keywords are present in the resulting list of words.
+         * 
+         * @param {string} transcription - The transcribed text to search for keywords in.
+         * @returns {boolean} - Returns `true` if any of the predefined command keywords are found in the transcription, `false` otherwise.
+         */
         private detectKeywords(transcription: string): boolean {
             const words = transcription.toLowerCase().replace(/[^a-zA-Z\s]/g, "").split(" ");
             return this.commandKeywords.some(keyword => words.includes(keyword.toLowerCase()));
@@ -1021,7 +1254,9 @@
 
         /**
          * Handle transcription result and call the registered callback
-         * @param transcription The transcription result
+         * 
+         * @param {string} transcription The transcription result
+         * @returns {void}
          */
         private async handleFunctionCall(fcCallRes: string) {
             this.statusManager.showSuccess("Query submitted!");
@@ -1031,6 +1266,19 @@
             }
         }
 
+        /**
+         * Handles a transcription and triggers the appropriate function based on the identified command.
+         * 
+         * How it Works:
+         * 1. Extracts the command from the transcription.
+         * 2. Cleans up the transcription by removing the command.
+         * 3. Sets up the query for the function resolver.
+         * 4. Submit the query for function resolution.
+         * 5. Wait for the result and evoke the callback function with the result.
+         * 6. Clears the transcription buffer to avoid duplicate processing and decrease transmission data.
+         * 
+         * @param {string} transcription - The transcribed text containing a command.
+         */
         private async handleCommand(transcription: string) {
             // Extract command
             const command = this.extractCommand(transcription);
@@ -1063,12 +1311,20 @@
 
         /**
          * Registers a callback to be called when transcription is done
-         * @param callback The function to be called with the transcription result
+         * 
+         * @param {function} callback The function to be called with the transcription result
+         * @returns {void}
          */
-        public onFCComplete(callback: (transcription: string) => void): void {
+        public onFCComplete(callback: (transcription: string) => void) {
             this.fcCallback = callback;
         }
 
+        /**
+         * Extracts the command from the transcription by searching for predefined keywords.
+         * 
+         * @param {string} transcription - The transcribed text to extract the command from.
+         * @returns {string} - The matched command keyword or an empty string if no match is found.
+         */
         private extractCommand(transcription: string): string {
             const lowerTranscription = transcription.toLowerCase().trim();
         
@@ -1081,6 +1337,11 @@
             return "";
         }
 
+        /**
+         * Stops the continuous audio recording and clears any scheduled audio chunk intervals.
+         * 
+         * @returns {Promise<void>}
+         */
         public async stopContinuousRecording() {
             if (this.chunkIntervalId !== null) {
                 window.clearInterval(this.chunkIntervalId);
@@ -1094,8 +1355,10 @@
 
         /**
          * Toggles audio capture state and processes captured audio
+         * 
+         * @returns {Promise<void>}
          */
-        public async toggleCapture(): Promise<void> {
+        public async toggleCapture() {
             const msg = "Audio Capture: " + (this.capturing ? "OFF" : "ON");
             console.log(msg);
             this.statusManager.logMessage(msg);
@@ -1112,6 +1375,8 @@
         /**
          * Starts recording audio using the MediaRecorder API (https://developer.mozilla.org/en-US/docs/Web/API/MediaStream_Recording_API). Configures the recorder with
          * audio settings, stores audio chunks, and prepares an audio context for processing.
+         * 
+         * @returns {Promise<void>}
          */
         public async startRecording() {
             // Set the audio format to match backend (16kHz, mono, 16-bit)
@@ -1157,9 +1422,10 @@
 
         /**
          * Retrieves a specific element (to modify/read) by type and label
-         * @param type Element type
-         * @param label Element label
-         * @returns HTMLElement or undefined if not found
+         * 
+         * @param {string} type Element type
+         * @param {string} label Element label
+         * @returns {HTMLElement | undefined} HTMLElement or undefined if not found
          */
         public getElement(type: string, label: string): HTMLElement | undefined {
             return this.elementMap.get(type)?.get(label);
@@ -1167,8 +1433,8 @@
 
         /**
          * Gets all element labels of a specific type
-         * @param type Element type
-         * @returns Array of element labels
+         * @param {string} type Element type
+         * @returns {string[]} Array of element labels
          */
         public getAllElements(type: string): string[] {
             const elements = this.elementMap.get(type);
@@ -1177,7 +1443,8 @@
 
         /**
          * Adds a tool schema generator (not its result) to the registry
-         * @param schemaGenerator Function that generates schema
+         * 
+         * @param {function} schemaGenerator Function that generates schema
          */
         public addToolSchema(schemaGenerator: () => any): void {
             // The reason we store the function is that we want to evaluate it later on demand (this is done to ensure everything has already been correclty initialized)
@@ -1191,7 +1458,8 @@
 
         /**
          * Invokes each schemaGenerator function to generate the actual schema and return them as JSON strings
-         * @returns Array of JSON schema strings
+         * 
+         * @returns {Promise<string>} Array of JSON schema strings
          */
         public async getToolSchemas(): Promise<string[]> {
             const schemaPromises = this.toolSchemas.map(async generator => {
@@ -1215,6 +1483,11 @@
             return schemas.filter(schema => schema !== null);
         }
 
+        /**
+         * Resets the entire tool’s state including the states of its backend instances, clearing buffers, stopping any active capture, and resetting relevant data.
+         * 
+         * @returns {void}
+         */
         public reset(): void {
             if (this.capturing){
                 this.audioController.toggleCapture();

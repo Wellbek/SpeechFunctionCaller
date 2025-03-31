@@ -1,3 +1,9 @@
+/**
+* Author: Louis Wellmeyer
+* Date: March 31, 2025
+* License: CC BY
+*/
+
 package speechfunctioncaller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -25,8 +31,6 @@ import org.springframework.web.socket.WebSocketSession;
  * - Sends correct format to Azure's API for transcription
  * 
  * NOTE: Currently limited to OpenAI's Whisper on an AZURE server.
- *
- * Singleton pattern: as there ever only needs to be one instance and we have global states 
  */
 public class Transcriber {
     // Azure credentials
@@ -83,8 +87,8 @@ public class Transcriber {
     // Timestamp of first audio data addition since last transcription
     private long firstDataAddedTimestamp = 0;
 
-    private static final int SILENCE_TIMEOUT_SECONDS = 3;
-    private static final int MAX_AUDIO_TIMEOUT_SECONDS = 15;
+    private static final int SILENCE_TIMEOUT_SECONDS = 3; // Time in seconds of silence until transcription is triggered
+    private static final int MAX_AUDIO_TIMEOUT_SECONDS = 15; // Time in seconds until transcription is triggered regardless of silence or not. Ensures transcription even in noisy environments.
 
     // Atomic integer to track transcription ID for logging
     private static final AtomicInteger transcriptionCounter = new AtomicInteger(0);
@@ -178,7 +182,7 @@ public class Transcriber {
 
     /**
      * Common handler for when new audio data is added from any source
-     * Sets up a timer to trigger transcription after a period of inactivity
+     * Sets up a timer to trigger transcription after a period of inactivity or timeout
      */
     private void handleNewDataAdded() {
         long currentTime = System.currentTimeMillis();
@@ -236,7 +240,7 @@ public class Transcriber {
         return !base64AudioChunks.isEmpty() || websocketAudioBuffer.size() > 0;
     }
 
-        /**
+    /**
      * Starts the transcription process by gathering all available audio data
      */
     private void startTranscription() {
@@ -463,6 +467,19 @@ public class Transcriber {
         }
     }
 
+    /**
+     * Clears all transcription-related data and cancels any ongoing or pending transcription tasks.
+     * This method ensures that no lingering transcription processes interfere with new ones.
+     * 
+     * - Cancels any scheduled transcription timer.
+     * - Cancels any ongoing transcription task.
+     * - Resets current and previous transcription results.
+     * - Clears stored Base64 audio data buffers.
+     * - Resets the websocket audio buffer.
+     * - Marks that no new transcription data is available.
+     * 
+     * This method is synchronized on `transcriptionLock` to ensure thread safety.
+     */
     public void clearAll() {
         synchronized (transcriptionLock) { 
             // Cancel any pending transcription timer

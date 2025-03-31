@@ -1,3 +1,9 @@
+/**
+* Author: Louis Wellmeyer
+* Date: March 31, 2025
+* License: CC BY
+*/
+
 package speechfunctioncaller;
 
 import java.lang.reflect.Method;
@@ -9,7 +15,7 @@ import com.google.gson.JsonObject;
 
 /**
  * DataProcessor class handles dynamic method invocation based on JSON input.
- * This class serves as a bridge between JSON-formatted function calls and actual Java method execution.
+ * This class serves as a bridge between JSON-formatted functions and actual Java method execution.
  * Static class as we only need its functions and it doesn't have a state
  *
  * The class expects JSON input in the format:
@@ -23,13 +29,14 @@ public class DataProcessor {
     private static final Gson gson = new Gson();
 
     /**
-     * Main processing method that handles the JSON input and executes the specified function.
+     * Handles the JSON input, retrieves the corresponding instance, and executes the specified function.
      *
-     * @param data JSON-formatted string containing function call information
-     * @return Object Result of the method invocation
+     * @param clientId Unique identifier for the client session, used to retrieve the correct instance of the backend classes.
+     * @param data JSON-formatted string containing function information.
+     * @return Result of the method invocation.
      * 
-     * @throws IllegalArgumentException if input is invalid or required fields are missing
-     * @throws Exception if any error occurs during processing
+     * @throws IllegalArgumentException if input is invalid or required fields are missing.
+     * @throws Exception if any error occurs during processing or method execution.
      */
     public static Object process(String clientId, String data) throws Exception {
         if (data == null || data == "") {
@@ -39,7 +46,7 @@ public class DataProcessor {
         try {
             JsonObject jsonObject = gson.fromJson(data, JsonObject.class);
 
-            // Validate required fields
+            // Validate required fields in the JSON input
             if (!jsonObject.has("class") || !jsonObject.has("function") || !jsonObject.has("parameters")) {
                 throw new IllegalArgumentException("Missing required fields in input JSON");
             }
@@ -48,14 +55,14 @@ public class DataProcessor {
             String functionName = jsonObject.get("function").getAsString().replace("()", ""); // Remove parentheses from method name if they were provided
             Object[] parameters = gson.fromJson(jsonObject.get("parameters"), Object[].class);
 
-            // get client-specific instance
+            // Retrieve a client-specific instance using InstanceManager
             Object instance = InstanceManager.getInstance(clientId, className);
 
             if (instance == null) {
                 throw new IllegalStateException("Failed to resolve instance for class: " + className);
             }
 
-            // Use reflection to find and invoke the specified method
+            // Use reflection to locate and invoke the requested method on the retrieved instance
             Method method = instance.getClass().getMethod(functionName, getParameterTypes(parameters));
             return method.invoke(instance, parameters);
 

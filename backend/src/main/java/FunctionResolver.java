@@ -1,3 +1,9 @@
+/**
+* Author: Louis Wellmeyer
+* Date: March 31, 2025
+* License: CC BY
+*/
+
 package speechfunctioncaller;
 
 import com.azure.ai.openai.OpenAIClient;
@@ -11,35 +17,27 @@ import java.util.regex.*;
 
 /**
  * FunctionResolver class manages interactions with Azure OpenAI's function calling capabilities.
- * Purpose:
- * - Function definition management
- * - Context history tracking and compression
- * - JSON processing for function calls
+ * Responsibilities:
+ * - Manages function definitions
+ * - Tracks and compresses conversation history
+ * - Processes natural language to identify specified functions to call
  * 
  * NOTE: Currently limited to OpenAI's ChatCompletionsAPI on an AZURE server.
- *
- * Singleton pattern: as there ever only needs to be one instance and we have global states 
  */
 public class FunctionResolver {
 
     private String ENDPOINT = "";
     private String TOKEN = "";
     private String MODEL = "";
-
-    // Azure OpenAI client instance for API communication
-    private OpenAIClient client;
+    private OpenAIClient client; // Azure OpenAI client instance
 
     // Threshold for when to compress conversation history
     // Compression occurs when history size reaches COMPRESSION_THRESHOLD * 2 (prompt + answer)
     private static final int COMPRESSION_THRESHOLD = 3;
-
-    // Stores the conversation history as a list of user messages up to the compression threshold
-    private final List<ChatRequestUserMessage> contextHistory = new ArrayList<>();
-
-    // Stores the compressed summary of previous conversations exceeding the compression threshold
-    private String contextSummary = "";
-
-    private String query = "";
+    private final List<ChatRequestUserMessage> contextHistory = new ArrayList<>(); // Conversation history
+    private String contextSummary = ""; // Compressed summary of past conversations
+    private String query = ""; // Current user query
+    private List<ChatCompletionsToolDefinition> tools = new ArrayList<>(); // Registered tools
 
     // List of available function definitions that can be called
     private List<ChatCompletionsToolDefinition> tools = new ArrayList<>();
@@ -68,6 +66,7 @@ public class FunctionResolver {
 
     /**
      * Sets the current query to be processed
+     * 
      * @param query The user's input query text
      */
     public void setQuery(String query) {
@@ -83,6 +82,7 @@ public class FunctionResolver {
 
     /**
      * Checks if any tools/functions are registered
+     * 
      * @return boolean indicating if tools are available
      */
     public boolean hasTools() {
@@ -129,7 +129,7 @@ public class FunctionResolver {
     /**
      * Main method for processing queries and resolving function calls
      *
-     * @return Escaped JSON string containing either function calls or message response
+     * @return JSON-formatted response string containing function calls or messages.
      */
     public String resolveFunctions() {
         // Prepare chat messages with system context and history
@@ -244,7 +244,6 @@ public class FunctionResolver {
     /**
      * Compresses conversation history when it exceeds threshold
      * Creates a summary of key information to maintain context while reducing memory usage => less tokens, faster responses
-     * Focuses specifically on car and battery information
      */
     private void compressContext() {
         // Prepare compression request
@@ -276,8 +275,12 @@ public class FunctionResolver {
         contextHistory.clear();
     }
 
+    /**
+     * Clears current query, conversation history and summaries.
+     */
     public void clearAll() {
         contextHistory.clear();
         contextSummary = "";
+        query = "";
     }
 }
